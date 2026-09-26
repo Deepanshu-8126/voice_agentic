@@ -1,7 +1,7 @@
+# Root netlify configuration
 [build]
-  base = "frontend"
-  publish = "dist"
-  command = "npm run build"
+  command = "cd frontend && npm install && npm run build"
+  publish = "frontend/dist"
 
 [[redirects]]
   from = "/*"

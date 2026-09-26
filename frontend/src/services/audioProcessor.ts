@@ -104,6 +104,9 @@ export class AudioProcessor {
   // Play incoming PCM 24kHz Audio chunk smoothly
   public playPcmChunk(base64Data: string) {
     const ctx = this.initPlaybackContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
     if (!this.outputAnalyserNode) {
       this.outputAnalyserNode = ctx.createAnalyser();
       this.outputAnalyserNode.fftSize = 256;
@@ -137,10 +140,11 @@ export class AudioProcessor {
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(this.outputAnalyserNode);
+      source.connect(ctx.destination);
 
       const currentTime = ctx.currentTime;
       if (this.nextPlayTime < currentTime) {
-        this.nextPlayTime = currentTime + 0.03;
+        this.nextPlayTime = currentTime + 0.01;
       }
 
       source.start(this.nextPlayTime);

@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Send,
   Square,
   Mic,
   MicOff,
@@ -9,8 +8,10 @@ import {
   Sliders,
   Trash2,
   Menu,
-  Code,
-  Zap
+  Cpu,
+  Compass,
+  FileCode,
+  ArrowUp
 } from 'lucide-react';
 import type { Conversation, AppSettings, ModelOption } from '../types';
 import { MessageItem } from './MessageItem';
@@ -52,16 +53,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const messages = conversation ? conversation.messages : [];
 
-  // Auto-scroll to bottom on message update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  // Adjust textarea height
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 220)}px`;
     }
   }, [inputText]);
 
@@ -81,7 +80,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  // Browser Speech-to-Text for typing
   const toggleDictation = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -134,76 +132,80 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const starterCards = [
     {
       icon: <Radio className="w-5 h-5 text-purple-400" />,
-      title: 'Real-time Voice Agent',
-      desc: 'Start low-latency bidirectional voice call with Gemini Live audio.',
+      tag: 'Realtime Voice',
+      title: 'Gemini Live Voice Studio',
+      desc: 'Bidirectional low-latency audio stream with reactive 3D glowing voice orb.',
       action: () => onOpenVoiceModal()
     },
     {
-      icon: <Zap className="w-5 h-5 text-amber-400" />,
-      title: 'Python / JavaScript Coding',
-      desc: 'Write high-performance backend, async tasks, or modern UI code.',
-      prompt: 'Write a modern Python FastAPI WebSocket service with error handling and logging.'
+      icon: <FileCode className="w-5 h-5 text-cyan-400" />,
+      tag: 'Development',
+      title: 'Full-Stack & Systems Coding',
+      desc: 'Build scalable Python FastAPI, WebSockets, or high-performance React code.',
+      prompt: 'Write a high-performance Python FastAPI service with WebSockets and error handling.'
     },
     {
-      icon: <Code className="w-5 h-5 text-blue-400" />,
-      title: 'Explain Complex Tech',
-      desc: 'Deep dive into architecture, AI models, and system design.',
-      prompt: 'Explain how Gemini 2.0 Multimodal Live WebSocket protocol works with PCM audio.'
+      icon: <Cpu className="w-5 h-5 text-indigo-400" />,
+      tag: 'Architecture',
+      title: 'Deep System Design',
+      desc: 'Analyze multi-modal streaming architectures, PCM audio pipelines & WebRTC.',
+      prompt: 'Explain the internal architecture of Gemini 2.0/3.8 Multimodal Live WebSocket protocol.'
     },
     {
-      icon: <Sparkles className="w-5 h-5 text-emerald-400" />,
-      title: 'Voice Conversational Practice',
-      desc: 'Practice speaking English or technical interview questions.',
-      prompt: 'Let us practice technical interview questions. Ask me one question at a time.'
+      icon: <Compass className="w-5 h-5 text-emerald-400" />,
+      tag: 'Assistant',
+      title: 'Conversational Brainstorming',
+      desc: 'Explore creative ideas, optimize workflows, and generate technical solutions.',
+      prompt: 'Help me plan the architecture for an autonomous AI developer agent with streaming audio.'
     }
   ];
 
   return (
-    <div className="flex flex-col flex-1 h-full bg-chatBg-main overflow-hidden">
+    <div className="flex flex-col flex-1 h-full bg-dark-950 overflow-hidden relative">
       
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/80 bg-chatBg-main z-10">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.07] bg-dark-950/80 backdrop-blur-xl z-20">
         <div className="flex items-center gap-3">
           {isSidebarCollapsed && (
             <button
               onClick={onToggleSidebar}
-              className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-chatBg-700 transition-colors"
+              className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
               title="Expand Sidebar"
             >
               <Menu className="w-5 h-5" />
             </button>
           )}
 
-          {/* Model Selector */}
+          {/* Model Selector Pill */}
           <div className="flex items-center gap-2">
             <select
               value={settings.selectedModel}
               onChange={(e) => onModelChange(e.target.value)}
-              className="bg-chatBg-800 hover:bg-chatBg-700 text-gray-200 font-medium text-xs px-3 py-1.5 rounded-xl border border-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer transition-colors"
+              className="bg-dark-900 hover:bg-dark-850 text-gray-200 font-semibold text-xs px-3.5 py-1.5 rounded-xl border border-white/10 hover:border-purple-500/40 focus:outline-none focus:ring-2 focus:ring-purple-500/40 cursor-pointer shadow-sm transition-all"
             >
               {models.length > 0 ? (
                 models.map(m => (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.id} value={m.id} className="bg-dark-900 text-gray-200">
                     {m.name}
                   </option>
                 ))
               ) : (
                 <>
-                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                  <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                  <option value="gemini-3.8-flash">Gemini 3.8 Flash (Latest)</option>
+                  <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
+                  <option value="gemini-flash-latest">Gemini Flash Latest</option>
                 </>
               )}
             </select>
           </div>
         </div>
 
-        {/* Right header controls */}
-        <div className="flex items-center gap-2">
-          {/* Live Voice Call Button */}
+        {/* Right Header Controls */}
+        <div className="flex items-center gap-2.5">
+          {/* Live Voice Mode Launch Button */}
           <button
             onClick={onOpenVoiceModal}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:opacity-90 text-white text-xs font-semibold shadow-md transition-all active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white text-xs font-semibold shadow-lg shadow-purple-500/25 transition-all active:scale-95 border border-purple-400/30"
             title="Start Live Voice Call"
           >
             <Radio className="w-3.5 h-3.5 animate-pulse" />
@@ -214,18 +216,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           {messages.length > 0 && (
             <button
               onClick={onClearCurrentChat}
-              className="p-2 rounded-xl text-gray-400 hover:text-red-400 hover:bg-chatBg-700 transition-colors"
+              className="p-2 rounded-xl text-gray-400 hover:text-rose-400 hover:bg-white/10 transition-colors"
               title="Clear messages"
             >
               <Trash2 className="w-4 h-4" />
             </button>
           )}
 
-          {/* Settings */}
+          {/* Settings Button */}
           <button
             onClick={onOpenSettings}
-            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-chatBg-700 transition-colors"
-            title="Dashboard Settings"
+            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            title="Settings"
           >
             <Sliders className="w-4 h-4" />
           </button>
@@ -235,18 +237,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center min-h-[70vh] max-w-2xl mx-auto text-center px-4">
+          <div className="flex flex-col items-center justify-center min-h-[72vh] max-w-3xl mx-auto text-center px-4 animate-fade-in">
             
-            {/* Hero Logo */}
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-xl shadow-purple-500/20 mb-4 animate-orb-glow">
-              <Sparkles className="w-8 h-8" />
+            {/* Hero Glowing AI Icon */}
+            <div className="relative mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 flex items-center justify-center text-white shadow-2xl shadow-purple-500/40 animate-glow-pulse">
+                <Sparkles className="w-8 h-8" />
+              </div>
             </div>
 
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 tracking-tight">
-              Kilo AI Voice & Chat Studio
+            <h1 className="text-2xl md:text-4xl font-extrabold text-white mb-2.5 tracking-tight">
+              What can I help you build today?
             </h1>
-            <p className="text-sm text-gray-400 max-w-md mb-8">
-              Experience ultra low-latency Voice conversation with Gemini 2.0 Live and ChatGPT-level intelligent chat interface.
+            <p className="text-sm text-gray-400 max-w-lg mb-8 leading-relaxed">
+              Supercharged with Google Gemini 3.8 Flash, real-time bidirectional audio streaming & low-latency voice intelligence.
             </p>
 
             {/* Quick Starter Cards */}
@@ -258,15 +262,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     if (card.action) card.action();
                     else if (card.prompt) onSendMessage(card.prompt);
                   }}
-                  className="flex flex-col p-4 rounded-2xl bg-chatBg-800/80 hover:bg-chatBg-700/80 border border-gray-800/80 hover:border-gray-700 transition-all text-left group shadow-sm active:scale-[0.99]"
+                  className="group relative flex flex-col p-4 rounded-2xl bg-dark-900/90 hover:bg-dark-850 border border-white/[0.08] hover:border-purple-500/40 transition-all text-left shadow-lg hover:shadow-purple-500/10 active:scale-[0.99]"
                 >
-                  <div className="flex items-center gap-2.5 mb-1.5">
-                    {card.icon}
-                    <span className="text-xs font-semibold text-gray-200 group-hover:text-blue-400 transition-colors">
-                      {card.title}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="p-2 rounded-xl bg-white/[0.05] border border-white/10 group-hover:border-purple-500/30 transition-colors">
+                      {card.icon}
+                    </div>
+                    <span className="text-[10px] font-bold text-gray-400 group-hover:text-purple-300 font-mono tracking-wider uppercase">
+                      {card.tag}
                     </span>
                   </div>
-                  <p className="text-[11px] text-gray-400 line-clamp-2">
+                  <h3 className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors mb-1">
+                    {card.title}
+                  </h3>
+                  <p className="text-[11px] text-gray-400 line-clamp-2 leading-relaxed">
                     {card.desc}
                   </p>
                 </button>
@@ -286,52 +295,52 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Bar Section */}
-      <div className="p-4 bg-chatBg-main">
+      {/* Modern Floating Input Bar Section */}
+      <div className="p-4 md:p-6 bg-gradient-to-t from-dark-950 via-dark-950 to-transparent z-20">
         <div className="max-w-3xl mx-auto">
-          <div className="relative flex flex-col bg-chatBg-input border border-gray-700/80 rounded-2xl shadow-xl focus-within:border-gray-500 transition-all">
+          <div className="relative flex flex-col glass-panel rounded-3xl shadow-2xl focus-within:border-purple-500/50 transition-all">
             
-            {/* Textarea */}
+            {/* Autosizing Textarea */}
             <textarea
               ref={textareaRef}
               rows={1}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything or use Voice mode..."
-              className="w-full pl-4 pr-28 py-3.5 bg-transparent text-sm text-gray-100 placeholder-gray-400 focus:outline-none resize-none max-h-48 overflow-y-auto"
+              placeholder="Message Gemini or click Voice Mode..."
+              className="w-full pl-5 pr-28 py-4 bg-transparent text-sm text-gray-100 placeholder-gray-500 focus:outline-none resize-none max-h-52 overflow-y-auto"
             />
 
-            {/* Bottom Actions inside input */}
-            <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
-              <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-chatBg-800 text-[11px] border border-gray-700/50">
+            {/* Bottom Actions inside input card */}
+            <div className="flex items-center justify-between px-4 pb-3 pt-1 border-t border-white/[0.04]">
+              <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.05] text-[10px] font-semibold text-purple-300 border border-white/10">
                   <Sparkles className="w-3 h-3 text-purple-400" />
                   {settings.selectedModel}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                {/* Voice Dictation (Speech to text in input) */}
+              <div className="flex items-center gap-2">
+                {/* Voice Dictation (Speech to text) */}
                 <button
                   onClick={toggleDictation}
                   type="button"
-                  title={isDictating ? 'Stop microphone dictation' : 'Speak to dictate text'}
-                  className={`p-2 rounded-xl transition-colors ${
+                  title={isDictating ? 'Stop microphone dictation' : 'Speech-to-text dictation'}
+                  className={`p-2 rounded-xl transition-all ${
                     isDictating
-                      ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse'
-                      : 'text-gray-400 hover:text-gray-200 hover:bg-chatBg-700'
+                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse'
+                      : 'text-gray-400 hover:text-gray-200 hover:bg-white/10'
                   }`}
                 >
                   {isDictating ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </button>
 
-                {/* Live Voice Call Button */}
+                {/* Live Voice Studio Button */}
                 <button
                   onClick={onOpenVoiceModal}
                   type="button"
-                  title="Open Live Voice Call"
-                  className="p-2 rounded-xl text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors"
+                  title="Launch Real-time Voice Mode"
+                  className="p-2 rounded-xl text-purple-400 hover:text-purple-300 hover:bg-purple-500/15 transition-all"
                 >
                   <Radio className="w-4 h-4" />
                 </button>
@@ -340,7 +349,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 {isStreaming ? (
                   <button
                     onClick={onStopStreaming}
-                    className="p-2 rounded-xl bg-white text-black hover:bg-gray-200 transition-colors shadow-md"
+                    className="p-2 rounded-xl bg-white text-dark-950 hover:bg-gray-200 transition-all shadow-md active:scale-95"
                     title="Stop Generating"
                   >
                     <Square className="w-4 h-4 fill-current" />
@@ -349,10 +358,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <button
                     onClick={handleSend}
                     disabled={!inputText.trim()}
-                    className="p-2 rounded-xl bg-white text-black disabled:opacity-30 disabled:hover:bg-white hover:bg-gray-200 transition-all shadow-md active:scale-95"
+                    className="p-2 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 hover:opacity-90 disabled:opacity-25 text-white transition-all shadow-md shadow-indigo-500/20 active:scale-95"
                     title="Send message"
                   >
-                    <Send className="w-4 h-4" />
+                    <ArrowUp className="w-4 h-4 stroke-[2.5]" />
                   </button>
                 )}
               </div>
@@ -360,8 +369,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
           </div>
 
-          <div className="text-center mt-2 text-[11px] text-gray-500">
-            Powered by Google Gemini 2.0 Flash • Low-latency Speech & Live Audio WebSocket Ready
+          <div className="text-center mt-2.5 text-[10px] text-gray-500 font-mono">
+            Powered by Google Gemini 3.8 Flash • Real-time Multimodal Live Audio Stream
           </div>
         </div>
       </div>

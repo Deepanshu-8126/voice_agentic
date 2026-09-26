@@ -29,6 +29,19 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
     const dataArray = new Uint8Array(128);
     const outputDataArray = new Uint8Array(128);
 
+    // Particle system for ambient energy
+    const particles: Array<{ x: number; y: number; r: number; speedX: number; speedY: number; alpha: number }> = [];
+    for (let i = 0; i < 30; i++) {
+      particles.push({
+        x: (Math.random() - 0.5) * 200,
+        y: (Math.random() - 0.5) * 200,
+        r: Math.random() * 2.5 + 1,
+        speedX: (Math.random() - 0.5) * 0.8,
+        speedY: (Math.random() - 0.5) * 0.8,
+        alpha: Math.random() * 0.6 + 0.2
+      });
+    }
+
     const render = () => {
       animationFrameId = requestAnimationFrame(render);
       const width = canvas.width;
@@ -38,7 +51,6 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
 
       ctx.clearRect(0, 0, width, height);
 
-      // Get mic frequency or output frequency
       let inputLevel = 0;
       if (analyser && isActive) {
         analyser.getByteFrequencyData(dataArray);
@@ -59,65 +71,81 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
         outputLevel = sum / outputDataArray.length / 255;
       }
 
-      const activeLevel = Math.max(inputLevel * 1.5, outputLevel * 2.2);
-      phase += 0.04 + activeLevel * 0.08;
+      const activeLevel = Math.max(inputLevel * 1.6, outputLevel * 2.4);
+      phase += 0.035 + activeLevel * 0.07;
 
       if (mode === 'orb') {
-        // Render 3D-like Glowing Organic AI Orb
-        const baseRadius = Math.min(width, height) * 0.22;
-        const dynamicRadius = baseRadius + activeLevel * 45;
+        const baseRadius = Math.min(width, height) * 0.23;
+        const dynamicRadius = baseRadius + activeLevel * 50;
 
-        // Outer glow
-        const glowGradient = ctx.createRadialGradient(
-          centerX, centerY, baseRadius * 0.5,
-          centerX, centerY, dynamicRadius * 1.8
+        // 1. Ambient outer aura
+        const auraGradient = ctx.createRadialGradient(
+          centerX, centerY, baseRadius * 0.3,
+          centerX, centerY, dynamicRadius * 2.0
         );
 
         if (status === 'speaking') {
-          // AI Speaking: Purple/Blue/Cyan glow
-          glowGradient.addColorStop(0, 'rgba(168, 85, 247, 0.8)');
-          glowGradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.4)');
-          glowGradient.addColorStop(1, 'rgba(168, 85, 247, 0)');
+          // AI Speaking: Neon Violet, Cyan & Electric Blue
+          auraGradient.addColorStop(0, 'rgba(168, 85, 247, 0.75)');
+          auraGradient.addColorStop(0.4, 'rgba(59, 130, 246, 0.4)');
+          auraGradient.addColorStop(0.75, 'rgba(6, 182, 212, 0.2)');
+          auraGradient.addColorStop(1, 'rgba(168, 85, 247, 0)');
         } else if (status === 'listening') {
-          // User speaking / listening: Emerald/Teal/Blue glow
-          glowGradient.addColorStop(0, 'rgba(52, 211, 153, 0.85)');
-          glowGradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.45)');
-          glowGradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+          // User speaking / listening: Emerald, Mint & Cyan
+          auraGradient.addColorStop(0, 'rgba(16, 185, 129, 0.85)');
+          auraGradient.addColorStop(0.4, 'rgba(6, 182, 212, 0.45)');
+          auraGradient.addColorStop(0.75, 'rgba(59, 130, 246, 0.15)');
+          auraGradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
         } else if (status === 'processing') {
-          // Processing: Amber/Orange glow
-          glowGradient.addColorStop(0, 'rgba(251, 191, 36, 0.8)');
-          glowGradient.addColorStop(0.6, 'rgba(245, 158, 11, 0.3)');
-          glowGradient.addColorStop(1, 'rgba(217, 119, 6, 0)');
+          // Processing: Amber & Rose Gold
+          auraGradient.addColorStop(0, 'rgba(245, 158, 11, 0.8)');
+          auraGradient.addColorStop(0.5, 'rgba(239, 68, 68, 0.3)');
+          auraGradient.addColorStop(1, 'rgba(245, 158, 11, 0)');
         } else {
-          // Idle glow
-          glowGradient.addColorStop(0, 'rgba(99, 102, 241, 0.4)');
-          glowGradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+          // Idle ambient pulse
+          auraGradient.addColorStop(0, 'rgba(99, 102, 241, 0.35)');
+          auraGradient.addColorStop(0.6, 'rgba(139, 92, 246, 0.15)');
+          auraGradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
         }
 
-        ctx.fillStyle = glowGradient;
+        ctx.fillStyle = auraGradient;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, dynamicRadius * 1.8, 0, Math.PI * 2);
+        ctx.arc(centerX, centerY, dynamicRadius * 2.0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Multi-layered pulsating organic waves
-        const layers = 4;
+        // 2. Ambient Floating Particles
+        particles.forEach(p => {
+          p.x += p.speedX * (1 + activeLevel * 2);
+          p.y += p.speedY * (1 + activeLevel * 2);
+          if (Math.hypot(p.x, p.y) > dynamicRadius * 1.5) {
+            p.x = (Math.random() - 0.5) * 50;
+            p.y = (Math.random() - 0.5) * 50;
+          }
+
+          ctx.fillStyle = status === 'speaking'
+            ? `rgba(196, 181, 253, ${p.alpha * (0.4 + activeLevel)})`
+            : `rgba(110, 231, 183, ${p.alpha * (0.4 + activeLevel)})`;
+          ctx.beginPath();
+          ctx.arc(centerX + p.x, centerY + p.y, p.r * (1 + activeLevel), 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // 3. Multi-layer Organic Fluid Wave Blobs
+        const layers = 5;
         for (let l = 0; l < layers; l++) {
           ctx.beginPath();
-          const points = 36;
+          const points = 48;
           for (let i = 0; i <= points; i++) {
             const angle = (i / points) * Math.PI * 2;
             const waveOffset =
-              Math.sin(angle * (3 + l) + phase + l) * (8 + activeLevel * 25) +
-              Math.cos(angle * 2 - phase * 0.8) * (4 + activeLevel * 15);
-            const r = dynamicRadius + waveOffset - l * 8;
+              Math.sin(angle * (3 + l) + phase + l * 0.7) * (10 + activeLevel * 30) +
+              Math.cos(angle * 2 - phase * 0.9 + l) * (6 + activeLevel * 18);
+            const r = dynamicRadius + waveOffset - l * 7;
             const x = centerX + Math.cos(angle) * r;
             const y = centerY + Math.sin(angle) * r;
 
-            if (i === 0) {
-              ctx.moveTo(x, y);
-            } else {
-              ctx.lineTo(x, y);
-            }
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
           }
           ctx.closePath();
 
@@ -127,48 +155,64 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
           );
 
           if (status === 'speaking') {
-            layerGradient.addColorStop(0, `rgba(147, 51, 234, ${0.4 - l * 0.08})`);
-            layerGradient.addColorStop(1, `rgba(59, 130, 246, ${0.5 - l * 0.08})`);
+            layerGradient.addColorStop(0, `rgba(168, 85, 247, ${0.45 - l * 0.07})`);
+            layerGradient.addColorStop(0.5, `rgba(59, 130, 246, ${0.4 - l * 0.06})`);
+            layerGradient.addColorStop(1, `rgba(6, 182, 212, ${0.35 - l * 0.05})`);
           } else if (status === 'listening') {
-            layerGradient.addColorStop(0, `rgba(16, 185, 129, ${0.4 - l * 0.08})`);
-            layerGradient.addColorStop(1, `rgba(14, 165, 233, ${0.5 - l * 0.08})`);
+            layerGradient.addColorStop(0, `rgba(16, 185, 129, ${0.5 - l * 0.08})`);
+            layerGradient.addColorStop(0.5, `rgba(6, 182, 212, ${0.4 - l * 0.06})`);
+            layerGradient.addColorStop(1, `rgba(59, 130, 246, ${0.35 - l * 0.05})`);
           } else {
-            layerGradient.addColorStop(0, `rgba(79, 70, 229, ${0.3 - l * 0.05})`);
-            layerGradient.addColorStop(1, `rgba(147, 51, 234, ${0.3 - l * 0.05})`);
+            layerGradient.addColorStop(0, `rgba(99, 102, 241, ${0.3 - l * 0.05})`);
+            layerGradient.addColorStop(1, `rgba(147, 51, 234, ${0.25 - l * 0.04})`);
           }
 
           ctx.fillStyle = layerGradient;
           ctx.fill();
         }
 
-        // Inner glowing core
+        // 4. Core glowing glass sphere
         const coreGradient = ctx.createRadialGradient(
-          centerX - 10, centerY - 10, 0,
-          centerX, centerY, baseRadius * 0.7
+          centerX - baseRadius * 0.25, centerY - baseRadius * 0.25, 0,
+          centerX, centerY, baseRadius * 0.75
         );
         coreGradient.addColorStop(0, '#ffffff');
-        coreGradient.addColorStop(0.4, status === 'speaking' ? '#c084fc' : '#6ee7b7');
-        coreGradient.addColorStop(1, status === 'speaking' ? '#6366f1' : '#0284c7');
+        coreGradient.addColorStop(0.35, status === 'speaking' ? '#d8b4fe' : '#a7f3d0');
+        coreGradient.addColorStop(0.7, status === 'speaking' ? '#8b5cf6' : '#06b6d4');
+        coreGradient.addColorStop(1, status === 'speaking' ? '#4f46e5' : '#059669');
 
         ctx.fillStyle = coreGradient;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, baseRadius * 0.55 + activeLevel * 15, 0, Math.PI * 2);
+        ctx.arc(centerX, centerY, baseRadius * 0.58 + activeLevel * 18, 0, Math.PI * 2);
         ctx.fill();
 
       } else {
-        // Waveform / Spectrum Bars Mode
-        const barWidth = width / 48;
-        ctx.fillStyle = status === 'speaking' ? '#a855f7' : '#10b981';
+        // Spectrum Bars Mode (High Craft Visualizer)
+        const barCount = 42;
+        const barWidth = 4;
+        const gap = (width - barCount * barWidth) / (barCount + 1);
 
-        for (let i = 0; i < 48; i++) {
-          const index = Math.floor((i / 48) * dataArray.length);
-          const val = (dataArray[index] || 0) / 255;
-          const barHeight = Math.max(6, val * height * 0.75 * (activeLevel + 0.3));
+        for (let i = 0; i < barCount; i++) {
+          const dataIdx = Math.floor((i / barCount) * dataArray.length);
+          const val = (dataArray[dataIdx] || 0) / 255;
+          const barHeight = Math.max(8, val * height * 0.7 * (activeLevel + 0.35));
 
-          const x = i * (barWidth + 2);
+          const x = gap + i * (barWidth + gap);
           const y = centerY - barHeight / 2;
 
-          ctx.fillRect(x, y, barWidth, barHeight);
+          const barGrad = ctx.createLinearGradient(x, y, x, y + barHeight);
+          if (status === 'speaking') {
+            barGrad.addColorStop(0, '#c084fc');
+            barGrad.addColorStop(1, '#3b82f6');
+          } else {
+            barGrad.addColorStop(0, '#34d399');
+            barGrad.addColorStop(1, '#06b6d4');
+          }
+
+          ctx.fillStyle = barGrad;
+          ctx.beginPath();
+          ctx.roundRect(x, y, barWidth, barHeight, 4);
+          ctx.fill();
         }
       }
     };
@@ -184,8 +228,8 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
     <div className="relative flex items-center justify-center w-full h-full">
       <canvas
         ref={canvasRef}
-        width={360}
-        height={360}
+        width={400}
+        height={400}
         className="max-w-full max-h-full transition-all duration-300"
       />
     </div>

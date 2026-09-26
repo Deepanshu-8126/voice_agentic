@@ -41,17 +41,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, selectedVoice
   };
 
   return (
-    <div className={`group flex gap-4 py-5 px-4 md:px-6 w-full max-w-4xl mx-auto rounded-2xl transition-colors ${
-      isUser ? 'bg-transparent' : 'bg-chatBg-800/40 border border-gray-800/40'
+    <div className={`group flex gap-4 py-5 px-4 md:px-6 w-full max-w-4xl mx-auto rounded-3xl transition-all ${
+      isUser
+        ? 'bg-transparent'
+        : 'glass-panel shadow-lg hover:border-white/15'
     }`}>
       {/* Avatar */}
       <div className="flex-shrink-0 mt-0.5">
         {isUser ? (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
             <User className="w-4 h-4" />
           </div>
         ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-md shadow-purple-500/20">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-purple-500/25">
             <Sparkles className="w-4 h-4" />
           </div>
         )}
@@ -59,11 +61,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, selectedVoice
 
       {/* Content */}
       <div className="flex-1 overflow-hidden space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-gray-400">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs font-bold text-gray-300">
             {isUser ? 'You' : 'Gemini AI'}
           </span>
-          <span className="text-[10px] text-gray-500">
+          <span className="text-[10px] text-gray-500 font-mono">
             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
@@ -107,29 +109,29 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, selectedVoice
           </ReactMarkdown>
 
           {message.isStreaming && (
-            <span className="inline-block w-2 h-4 ml-1 bg-blue-400 animate-pulse align-middle" />
+            <span className="inline-block w-2 h-4 ml-1.5 bg-gradient-to-t from-purple-500 to-cyan-400 rounded-sm animate-pulse align-middle" />
           )}
         </div>
 
         {/* Action Buttons for AI responses */}
         {!isUser && !message.isStreaming && (
-          <div className="flex items-center gap-2 pt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1.5 pt-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleCopy}
               title="Copy message"
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 px-2 py-1 rounded-md hover:bg-chatBg-700 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2.5 py-1 rounded-lg hover:bg-white/10 transition-colors"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
 
             <button
               onClick={handleSpeak}
               title={isSpeaking ? 'Stop speech' : 'Read aloud'}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors ${
                 isSpeaking
-                  ? 'text-purple-400 bg-purple-500/10'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-chatBg-700'
+                  ? 'text-purple-300 bg-purple-500/20 border border-purple-500/30'
+                  : 'text-gray-400 hover:text-white hover:bg-white/10'
               }`}
             >
               {isSpeaking ? <VolumeX className="w-3.5 h-3.5 animate-pulse" /> : <Volume2 className="w-3.5 h-3.5" />}
@@ -158,24 +160,24 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
   };
 
   return (
-    <div className="relative my-3 rounded-xl overflow-hidden bg-[#121212] border border-gray-800 shadow-lg">
+    <div className="relative my-3 rounded-2xl overflow-hidden bg-[#090a0f] border border-white/[0.09] shadow-xl">
       {/* Code Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#1b1b1b] border-b border-gray-800 text-xs text-gray-400 font-mono">
-        <div className="flex items-center gap-1.5">
-          <Terminal className="w-3.5 h-3.5 text-blue-400" />
+      <div className="flex items-center justify-between px-4 py-2.5 bg-dark-900 border-b border-white/[0.08] text-xs text-gray-400 font-mono">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-3.5 h-3.5 text-purple-400" />
           <span className="uppercase font-semibold tracking-wider text-gray-300">{language}</span>
         </div>
         <button
           onClick={handleCopyCode}
-          className="flex items-center gap-1 text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-[#2c2c2c] transition-colors"
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2.5 py-1 rounded-lg hover:bg-white/10 transition-colors"
         >
-          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
           <span>{copied ? 'Copied' : 'Copy code'}</span>
         </button>
       </div>
 
       {/* Code Body */}
-      <pre className="p-4 overflow-x-auto text-sm font-mono text-gray-200 leading-relaxed">
+      <pre className="p-4 overflow-x-auto text-xs md:text-sm font-mono text-gray-200 leading-relaxed">
         <code>{code}</code>
       </pre>
     </div>

@@ -10,7 +10,8 @@ import {
   Sparkles,
   Search,
   Check,
-  Edit2
+  Edit2,
+  SlidersHorizontal
 } from 'lucide-react';
 import type { Conversation } from '../types';
 
@@ -63,11 +64,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="flex flex-col items-center justify-between w-16 h-full py-4 bg-chatBg-sidebar border-r border-gray-800/80 transition-all duration-300">
+      <div className="flex flex-col items-center justify-between w-16 h-full py-4 bg-dark-900 border-r border-white/[0.07] transition-all duration-300">
         <div className="flex flex-col items-center gap-3">
           <button
             onClick={onToggleCollapse}
-            className="p-2.5 rounded-xl hover:bg-chatBg-700 text-gray-400 hover:text-white transition-colors"
+            className="p-2.5 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
             title="Expand Sidebar"
           >
             <ChevronRight className="w-5 h-5" />
@@ -75,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={onNewChat}
-            className="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-md transition-transform active:scale-95"
+            className="p-2.5 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 hover:opacity-90 text-white shadow-lg shadow-indigo-500/20 transition-transform active:scale-95"
             title="New Chat"
           >
             <Plus className="w-5 h-5" />
@@ -83,8 +84,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={onOpenVoiceModal}
-            className="p-2.5 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-md hover:opacity-90 transition-all"
-            title="Live Voice Call"
+            className="p-2.5 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-cyan-500 text-white shadow-lg shadow-purple-500/25 hover:opacity-90 transition-all"
+            title="Live Voice Studio"
           >
             <Mic className="w-5 h-5" />
           </button>
@@ -93,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex flex-col items-center gap-3">
           <button
             onClick={onOpenSettings}
-            className="p-2.5 rounded-xl hover:bg-chatBg-700 text-gray-400 hover:text-white transition-colors"
+            className="p-2.5 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
             title="Settings"
           >
             <Settings className="w-5 h-5" />
@@ -104,22 +105,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   return (
-    <div className="flex flex-col justify-between w-72 h-full bg-chatBg-sidebar border-r border-gray-800/80 transition-all duration-300">
+    <div className="flex flex-col justify-between w-72 h-full bg-dark-900 border-r border-white/[0.07] transition-all duration-300">
       
       {/* Top Section */}
-      <div className="flex flex-col p-3 space-y-3">
-        {/* Header & Collapse */}
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-sm">
+      <div className="flex flex-col p-3.5 space-y-3">
+        {/* Header & Logo */}
+        <div className="flex items-center justify-between px-2 pt-1">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-purple-500/20">
               <Sparkles className="w-4 h-4" />
             </div>
-            <span className="font-semibold text-sm tracking-wide text-gray-100">Kilo AI Studio</span>
+            <div className="flex flex-col">
+              <span className="font-bold text-sm tracking-tight text-white flex items-center gap-1.5">
+                Kilo AI Studio
+                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">PRO</span>
+              </span>
+              <span className="text-[10px] text-gray-400 font-mono">Gemini 3.8 Flash</span>
+            </div>
           </div>
 
           <button
             onClick={onToggleCollapse}
-            className="p-1.5 rounded-lg hover:bg-chatBg-700 text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
             title="Collapse Sidebar"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -129,53 +136,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* New Chat Button */}
         <button
           onClick={onNewChat}
-          className="flex items-center justify-between w-full px-3.5 py-2.5 rounded-xl bg-chatBg-700 hover:bg-chatBg-600 border border-gray-700/60 text-gray-200 text-sm font-medium transition-all shadow-sm group active:scale-[0.98]"
+          className="flex items-center justify-between w-full px-3.5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 text-gray-200 text-xs font-semibold transition-all shadow-sm group active:scale-[0.98]"
         >
           <div className="flex items-center gap-2.5">
-            <Plus className="w-4 h-4 text-blue-400 group-hover:rotate-90 transition-transform duration-200" />
+            <Plus className="w-4 h-4 text-indigo-400 group-hover:rotate-90 transition-transform duration-200" />
             <span>New Chat</span>
           </div>
-          <span className="text-[10px] text-gray-400 bg-chatBg-800 px-1.5 py-0.5 rounded border border-gray-700">Ctrl+K</span>
+          <span className="text-[10px] text-gray-400 font-mono bg-dark-950 px-2 py-0.5 rounded-md border border-white/10">Ctrl+K</span>
         </button>
 
-        {/* Live Voice Call Button Shortcut */}
+        {/* Live Voice Studio Quick Launch Banner */}
         <button
           onClick={onOpenVoiceModal}
-          className="flex items-center justify-between w-full px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600/30 via-indigo-600/20 to-blue-600/30 border border-purple-500/30 hover:border-purple-500/60 text-purple-200 text-sm font-medium transition-all shadow-md group"
+          className="relative overflow-hidden flex items-center justify-between w-full px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600/25 via-indigo-600/20 to-cyan-500/25 border border-purple-500/30 hover:border-purple-400/60 text-purple-200 text-xs font-semibold transition-all shadow-md group"
         >
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white shadow-sm">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-sm">
               <Mic className="w-3.5 h-3.5 animate-pulse" />
             </div>
-            <span>Live Voice Mode</span>
+            <span>Live Voice Studio</span>
           </div>
-          <span className="text-[10px] text-purple-300 font-semibold px-2 py-0.5 rounded-full bg-purple-500/20">LIVE</span>
+          <span className="text-[9px] font-bold tracking-wider text-cyan-300 px-2 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/30">
+            REALTIME
+          </span>
         </button>
 
-        {/* Search Chats */}
-        {conversations.length > 4 && (
+        {/* Search Chats Filter */}
+        {conversations.length > 3 && (
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-gray-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-gray-500" />
             <input
               type="text"
-              placeholder="Search chats..."
+              placeholder="Search chat history..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-chatBg-800 text-xs text-gray-200 placeholder-gray-500 border border-gray-700/60 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-dark-950 text-xs text-gray-200 placeholder-gray-500 border border-white/10 focus:outline-none focus:ring-1 focus:ring-purple-500"
             />
           </div>
         )}
       </div>
 
       {/* Middle: Chat History List */}
-      <div className="flex-1 overflow-y-auto px-2 space-y-1">
-        <div className="px-2 pt-2 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-          Recent Conversations
+      <div className="flex-1 overflow-y-auto px-3 space-y-1">
+        <div className="px-2 pt-2 pb-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+          Conversations
         </div>
 
         {filteredConversations.length === 0 ? (
-          <div className="px-3 py-6 text-center text-xs text-gray-500">
-            No chats yet. Start a conversation!
+          <div className="px-3 py-8 text-center text-xs text-gray-500 flex flex-col items-center gap-2">
+            <MessageSquare className="w-6 h-6 text-gray-600 stroke-[1.5]" />
+            <span>No conversation yet.<br/>Start a fresh prompt!</span>
           </div>
         ) : (
           filteredConversations.map((c) => {
@@ -186,14 +196,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div
                 key={c.id}
                 onClick={() => onSelectConversation(c.id)}
-                className={`group relative flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer transition-colors ${
+                className={`group relative flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer transition-all ${
                   isActive
-                    ? 'bg-chatBg-700 text-white font-medium border border-gray-700/80 shadow-sm'
-                    : 'text-gray-300 hover:bg-chatBg-800/80 hover:text-white'
+                    ? 'bg-gradient-to-r from-purple-500/20 to-indigo-500/10 text-white font-semibold border border-purple-500/30 shadow-sm'
+                    : 'text-gray-300 hover:bg-white/[0.04] hover:text-white'
                 }`}
               >
                 <div className="flex items-center gap-2.5 overflow-hidden flex-1">
-                  <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-blue-400' : 'text-gray-400'}`} />
+                  <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-purple-400' : 'text-gray-500'}`} />
                   {isEditing ? (
                     <input
                       type="text"
@@ -204,19 +214,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         if (e.key === 'Escape') setEditingId(null);
                       }}
                       autoFocus
-                      className="w-full bg-chatBg-900 px-1.5 py-0.5 rounded text-xs text-white border border-blue-500 focus:outline-none"
+                      className="w-full bg-dark-950 px-2 py-0.5 rounded text-xs text-white border border-purple-500 focus:outline-none"
                     />
                   ) : (
                     <span className="truncate">{c.title || 'Untitled Chat'}</span>
                   )}
                 </div>
 
-                {/* Quick actions on hover */}
+                {/* Hover Actions */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pl-2">
                   {isEditing ? (
                     <button
                       onClick={(e) => saveRename(c.id, e)}
-                      className="p-1 text-green-400 hover:text-green-300 rounded hover:bg-chatBg-600"
+                      className="p-1 text-emerald-400 hover:text-emerald-300 rounded hover:bg-white/10"
                     >
                       <Check className="w-3.5 h-3.5" />
                     </button>
@@ -224,7 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <>
                       <button
                         onClick={(e) => startRename(c, e)}
-                        className="p-1 text-gray-400 hover:text-gray-200 rounded hover:bg-chatBg-600"
+                        className="p-1 text-gray-400 hover:text-gray-200 rounded hover:bg-white/10"
                         title="Rename"
                       >
                         <Edit2 className="w-3 h-3" />
@@ -234,7 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           e.stopPropagation();
                           onDeleteConversation(c.id);
                         }}
-                        className="p-1 text-gray-400 hover:text-red-400 rounded hover:bg-chatBg-600"
+                        className="p-1 text-gray-400 hover:text-rose-400 rounded hover:bg-white/10"
                         title="Delete"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -249,13 +259,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom: Settings Bar */}
-      <div className="p-3 border-t border-gray-800/80 bg-chatBg-sidebar space-y-1">
+      <div className="p-3 border-t border-white/[0.07] bg-dark-900 space-y-1">
         <button
           onClick={onOpenSettings}
-          className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:text-white hover:bg-chatBg-800 transition-colors"
+          className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
         >
-          <Settings className="w-4 h-4 text-gray-400" />
-          <span>Settings & API Key</span>
+          <div className="flex items-center gap-2.5">
+            <SlidersHorizontal className="w-4 h-4 text-purple-400" />
+            <span>Settings & API Key</span>
+          </div>
+          <span className="w-2 h-2 rounded-full bg-emerald-500" title="Connected" />
         </button>
       </div>
 

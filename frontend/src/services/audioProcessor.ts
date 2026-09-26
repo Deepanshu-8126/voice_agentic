@@ -1,6 +1,5 @@
 // High-precision Audio processing utilities for Gemini Live Voice
-// Mic Capture: Native Hardware AudioContext -> Linear Interpolation Resampler -> 16kHz PCM Int16
-// AI Playback: 24kHz PCM Int16 -> 24kHz Float32 -> Dedicated Playback Context
+// Features instant interrupt (barge-in) stopping active AudioBufferSourceNodes
 
 export class AudioProcessor {
   private micCtx: AudioContext | null = null;
@@ -12,6 +11,7 @@ export class AudioProcessor {
   private outputAnalyserNode: AnalyserNode | null = null;
   private nextPlayTime: number = 0;
   private isPlayingAudio: boolean = false;
+  private activeSources: Set<AudioBufferSourceNode> = new Set();
 
   public initPlaybackContext(): AudioContext {
     if (!this.playbackCtx || this.playbackCtx.state === 'closed') {
@@ -39,7 +39,6 @@ export class AudioProcessor {
   // Start Mic Capture using native hardware rate, then cleanly downsample to 16kHz
   public async startMicCapture(onPcmChunk: (base64Data: string) => void): Promise<AnalyserNode> {
     const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-    // Let browser choose its native hardware sample rate (typically 44.1kHz or 48kHz)
     this.micCtx = new AudioCtxClass();
     if (this.micCtx.state === 'suspended') {
       await this.micCtx.resume();
@@ -59,7 +58,6 @@ export class AudioProcessor {
     this.analyserNode.fftSize = 256;
     this.analyserNode.smoothingTimeConstant = 0.8;
 
-    // Buffer size 2048
     this.processorNode = this.micCtx.createScriptProcessor(2048, 1, 1);
 
     this.sourceNode.connect(this.analyserNode);
@@ -72,7 +70,6 @@ export class AudioProcessor {
     this.processorNode.onaudioprocess = (e) => {
       const inputData = e.inputBuffer.getChannelData(0);
       
-      // High-quality Linear Interpolation Downsampling to 16000 Hz
       const samples16k = this.downsampleTo16kHz(inputData, inSampleRate, targetSampleRate);
       const pcm16 = this.floatTo16BitPCM(samples16k);
       const base64Chunk = this.arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
@@ -150,8 +147,10 @@ export class AudioProcessor {
       source.start(this.nextPlayTime);
       this.nextPlayTime += audioBuffer.duration;
       this.isPlayingAudio = true;
+      this.activeSources.add(source);
 
       source.onended = () => {
+        this.activeSources.delete(source);
         if (ctx.currentTime >= this.nextPlayTime - 0.02) {
           this.isPlayingAudio = false;
         }
@@ -161,7 +160,16 @@ export class AudioProcessor {
     }
   }
 
+  // Barge-in / Interrupt: Instantly cuts off previous queued audio when user speaks
   public resetPlayback() {
+    this.activeSources.forEach(source => {
+      try {
+        source.stop();
+        source.disconnect();
+      } catch (e) {}
+    });
+    this.activeSources.clear();
+
     if (this.playbackCtx) {
       this.nextPlayTime = this.playbackCtx.currentTime;
     }
@@ -172,7 +180,7 @@ export class AudioProcessor {
     return this.isPlayingAudio;
   }
 
-  // Linear interpolation resampler for clear, natural speech transmission
+  // Linear interpolation resampler for clear speech transmission
   private downsampleTo16kHz(buffer: Float32Array, inSampleRate: number, outSampleRate: number): Float32Array {
     if (inSampleRate === outSampleRate) {
       return buffer;
@@ -220,6 +228,7 @@ export class AudioProcessor {
 
   public destroy() {
     this.stopMicCapture();
+    this.resetPlayback();
     if (this.playbackCtx && this.playbackCtx.state !== 'closed') {
       this.playbackCtx.close();
       this.playbackCtx = null;

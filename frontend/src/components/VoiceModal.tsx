@@ -151,6 +151,10 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
       const micAnalyser = await audioProcessor.startMicCapture((base64Pcm) => {
         if (!isMutedRef.current && liveClient.active()) {
+          // If user starts speaking while AI was talking, immediately stop old audio playback (Instant Barge-in)
+          if (audioProcessor.isSpeaking()) {
+            audioProcessor.resetPlayback();
+          }
           liveClient.sendAudioChunk(base64Pcm);
         }
       });

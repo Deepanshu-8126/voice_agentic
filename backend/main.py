@@ -11,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-import websockets
 from google import genai
 from google.genai import types
 
@@ -32,8 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-
 def get_api_key(client_key: Optional[str] = None) -> str:
     key = client_key.strip() if client_key and client_key.strip() else os.getenv("GOOGLE_API_KEY", "")
     if not key:
@@ -41,12 +38,12 @@ def get_api_key(client_key: Optional[str] = None) -> str:
     return key
 
 class Message(BaseModel):
-    role: str # "user" or "model" or "assistant"
+    role: str
     content: str
 
 class ChatRequest(BaseModel):
     messages: List[Message]
-    model: Optional[str] = "gemini-3.8-flash"
+    model: Optional[str] = "gemini-3.7-flash"
     system_prompt: Optional[str] = "You are a helpful, intelligent, fast, and friendly AI assistant."
     temperature: Optional[float] = 0.7
     apiKey: Optional[str] = None
@@ -58,37 +55,38 @@ class KeyVerifyRequest(BaseModel):
 async def health_check():
     key = os.getenv("GOOGLE_API_KEY", "")
     return {
-        "status": "ok",
+        "status": "healthy",
         "has_server_key": bool(key and len(key) > 5),
-        "default_model": os.getenv("DEFAULT_MODEL", "gemini-3.8-flash"),
-        "default_voice": os.getenv("DEFAULT_VOICE", "Aoede")
+        "default_model": "gemini-3.7-flash",
+        "default_voice": "Aoede"
     }
 
 @app.post("/api/verify-key")
 async def verify_key(req: KeyVerifyRequest):
-    key = get_api_key(req.apiKey)
+    test_key = req.apiKey.strip() if req.apiKey and req.apiKey.strip() else os.getenv("GOOGLE_API_KEY", "")
+    if not test_key:
+        return JSONResponse(status_code=400, content={"valid": False, "error": "No API key provided."})
+
     try:
-        client = genai.Client(api_key=key)
-        res = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents="Hi"
+        client = genai.Client(api_key=test_key)
+        resp = client.models.generate_content(
+            model="gemini-3.7-flash",
+            contents="Say 'OK' in 1 word."
         )
-        return {"valid": True, "message": "API Key is valid and active!"}
+        if resp and resp.text:
+            return {"valid": True, "model": "gemini-3.7-flash"}
+        return JSONResponse(status_code=400, content={"valid": False, "error": "Empty response from Gemini."})
     except Exception as e:
-        logger.error(f"Key verification error: {e}")
-        return JSONResponse(
-            status_code=400,
-            content={"valid": False, "error": str(e)}
-        )
+        return JSONResponse(status_code=400, content={"valid": False, "error": str(e)})
 
 @app.get("/api/models")
-async def list_models(key: Optional[str] = None):
+async def get_models():
     return {
         "models": [
-            {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash (Fastest & Best Live)", "isDefault": True},
-            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash", "isDefault": False},
+            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash (Fast & Stable)", "isDefault": True},
             {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "isDefault": False},
-            {"id": "gemini-flash-latest", "name": "Gemini Flash Latest", "isDefault": False},
+            {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite (Ultra Low Latency)", "isDefault": False},
+            {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash", "isDefault": False},
             {"id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro (Deep Reasoning)", "isDefault": False},
         ]
     }
@@ -98,7 +96,6 @@ async def chat_stream(req: ChatRequest):
     active_key = get_api_key(req.apiKey)
     client = genai.Client(api_key=active_key)
 
-    # Format history
     contents = []
     for msg in req.messages:
         role = "user" if msg.role == "user" else "model"
@@ -107,30 +104,47 @@ async def chat_stream(req: ChatRequest):
             parts=[types.Part.from_text(text=msg.content)]
         ))
 
-    model_name = req.model or "gemini-3.8-flash"
+    model_name = req.model or "gemini-3.7-flash"
+    fallback_models = ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash"]
+    if model_name not in fallback_models:
+        fallback_models.insert(0, model_name)
 
     async def event_generator():
-        try:
-            config = types.GenerateContentConfig(
-                temperature=req.temperature or 0.7,
-                system_instruction=req.system_prompt
-            )
-            response = client.models.generate_content_stream(
-                model=model_name,
-                contents=contents,
-                config=config
-            )
+        success = False
+        last_err = None
+        for current_model in fallback_models:
+            try:
+                config = types.GenerateContentConfig(
+                    temperature=req.temperature or 0.7,
+                    system_instruction=req.system_prompt
+                )
+                response = client.models.generate_content_stream(
+                    model=current_model,
+                    contents=contents,
+                    config=config
+                )
 
-            for chunk in response:
-                if chunk.text:
-                    payload = json.dumps({"text": chunk.text})
-                    yield f"data: {payload}\n\n"
-                    await asyncio.sleep(0.005)
+                for chunk in response:
+                    if chunk.text:
+                        payload = json.dumps({"text": chunk.text})
+                        yield f"data: {payload}\n\n"
+                        await asyncio.sleep(0.005)
 
-            yield f"data: {json.dumps({'done': True})}\n\n"
-        except Exception as e:
-            logger.error(f"Chat stream error: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                yield f"data: {json.dumps({'done': True})}\n\n"
+                success = True
+                break
+            except Exception as e:
+                err_str = str(e)
+                logger.warning(f"Model {current_model} failed with error: {err_str}. Trying fallback...")
+                last_err = err_str
+                if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str or "high demand" in err_str:
+                    continue
+                else:
+                    break
+
+        if not success:
+            logger.error(f"All models failed. Last error: {last_err}")
+            yield f"data: {json.dumps({'error': last_err or 'Service unavailable. Please retry.'})}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -142,50 +156,13 @@ async def chat_stream(req: ChatRequest):
         }
     )
 
-@app.post("/api/voice-turn")
-async def voice_turn(
-    audio: UploadFile = File(...),
-    system_prompt: Optional[str] = Form("You are a helpful, natural conversational voice assistant. Keep answers clear and concise for spoken audio."),
-    model_name: Optional[str] = Form("gemini-3.8-flash"),
-    api_key: Optional[str] = Form(None)
-):
-    active_key = get_api_key(api_key)
-    client = genai.Client(api_key=active_key)
-
-    try:
-        audio_bytes = await audio.read()
-        mime_type = audio.content_type or "audio/webm"
-
-        part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
-        response = client.models.generate_content(
-            model=model_name or "gemini-3.8-flash",
-            contents=[
-                part,
-                "Listen to this user speech. Answer naturally, clearly and conversationally."
-            ],
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt
-            )
-        )
-
-        return {
-            "text": response.text,
-            "success": True
-        }
-    except Exception as e:
-        logger.error(f"Voice turn error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-GEMINI_LIVE_WS_HOST = "generativelanguage.googleapis.com"
-GEMINI_LIVE_WS_PATH = "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
-
 @app.websocket("/ws/live")
 async def websocket_gemini_live(
     websocket: WebSocket,
     apiKey: Optional[str] = None,
-    model: Optional[str] = "models/gemini-2.0-flash-exp",
+    model: Optional[str] = "models/gemini-3.1-flash-live-preview",
     voice: Optional[str] = "Aoede",
-    system_prompt: Optional[str] = "You are an intelligent, low-latency, warm voice assistant. Be concise and natural in conversations."
+    system_prompt: Optional[str] = "You are an intelligent, low-latency, warm conversational voice assistant. Keep answers natural and concise."
 ):
     await websocket.accept()
     
@@ -195,35 +172,37 @@ async def websocket_gemini_live(
         await websocket.close(code=4001)
         return
 
-    gemini_uri = f"wss://{GEMINI_LIVE_WS_HOST}{GEMINI_LIVE_WS_PATH}?key={key}"
-    logger.info(f"Connecting to Gemini Live WebSocket API with voice: {voice}...")
+    live_model = "gemini-3.1-flash-live-preview"
+    logger.info(f"Connecting to official google-genai Live session with model={live_model}, voice={voice}...")
+
+    live_config = types.LiveConnectConfig(
+        response_modalities=[types.Modality.AUDIO],
+        system_instruction=types.Content(parts=[types.Part.from_text(text=system_prompt or "You are a warm, direct voice assistant.")]),
+        input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice or "Aoede")
+            )
+        ),
+        realtime_input_config=types.RealtimeInputConfig(
+            automatic_activity_detection=types.AutomaticActivityDetection(
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+                prefix_padding_ms=100,
+                silence_duration_ms=500,
+            )
+        ),
+    )
+
+    client = genai.Client(api_key=key)
 
     try:
-        async with websockets.connect(gemini_uri, subprotocols=["protocol-v1"]) as gemini_ws:
-            model_id = model if model.startswith("models/") else f"models/{model}"
-            setup_msg = {
-                "setup": {
-                    "model": model_id,
-                    "generation_config": {
-                        "response_modalities": ["AUDIO"],
-                        "speech_config": {
-                            "voice_config": {
-                                "prebuilt_voice_config": {
-                                    "voice_name": voice or "Aoede"
-                                }
-                            }
-                        }
-                    },
-                    "system_instruction": {
-                        "parts": [{"text": system_prompt}]
-                    }
-                }
-            }
-            await gemini_ws.send(json.dumps(setup_msg))
-            logger.info("Sent setup config to Gemini Live")
-            await websocket.send_json({"type": "connected", "message": "Connected to Gemini Live Voice Agent"})
+        async with client.aio.live.connect(model=live_model, config=live_config) as session:
+            logger.info("Official Gemini Live session established!")
+            await websocket.send_json({"type": "connected", "message": "Connected to Gemini Live"})
 
-            async def client_to_gemini():
+            async def pump_browser_to_gemini():
                 try:
                     while True:
                         msg = await websocket.receive_text()
@@ -231,79 +210,72 @@ async def websocket_gemini_live(
                         msg_type = data.get("type")
 
                         if msg_type == "audio":
-                            pcm_base64 = data.get("data")
-                            if pcm_base64:
-                                payload = {
-                                    "realtime_input": {
-                                        "media_chunks": [
-                                            {
-                                                "mime_type": "audio/pcm;rate=16000",
-                                                "data": pcm_base64
-                                            }
-                                        ]
-                                    }
-                                }
-                                await gemini_ws.send(json.dumps(payload))
+                            pcm_b64 = data.get("data")
+                            if pcm_b64:
+                                raw_bytes = base64.b64decode(pcm_b64)
+                                await session.send_realtime_input(
+                                    audio=types.Blob(
+                                        data=raw_bytes,
+                                        mime_type="audio/pcm;rate=16000"
+                                    )
+                                )
                         elif msg_type == "text":
                             user_text = data.get("text")
-                            payload = {
-                                "client_content": {
-                                    "turns": [
-                                        {
-                                            "role": "user",
-                                            "parts": [{"text": user_text}]
-                                        }
-                                    ],
-                                    "turn_complete": True
-                                }
-                            }
-                            await gemini_ws.send(json.dumps(payload))
+                            if user_text:
+                                await session.send(input=user_text, end_of_turn=True)
                 except WebSocketDisconnect:
                     pass
                 except Exception as e:
-                    logger.error(f"client_to_gemini error: {e}")
+                    logger.error(f"pump_browser_to_gemini error: {e}")
 
-            async def gemini_to_client():
+            async def pump_gemini_to_browser():
                 try:
-                    async for raw_msg in gemini_ws:
-                        resp = json.loads(raw_msg)
-                        server_content = resp.get("serverContent")
-                        if server_content:
-                            model_turn = server_content.get("modelTurn")
-                            if model_turn:
-                                for part in model_turn.get("parts", []):
-                                    inline_data = part.get("inlineData")
-                                    if inline_data and inline_data.get("mimeType", "").startswith("audio/"):
-                                        audio_base64 = inline_data.get("data")
+                    while True:
+                        async for raw_message in session.receive():
+                            server_content = getattr(raw_message, "server_content", None)
+                            if server_content is not None:
+                                # 1. Audio chunks
+                                model_turn = getattr(server_content, "model_turn", None)
+                                parts = getattr(model_turn, "parts", None) if model_turn is not None else None
+                                for part in (parts or []):
+                                    inline_data = getattr(part, "inline_data", None)
+                                    audio_bytes = getattr(inline_data, "data", None) if inline_data is not None else None
+                                    if audio_bytes and isinstance(audio_bytes, bytes):
+                                        b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
                                         await websocket.send_json({
                                             "type": "audio",
-                                            "data": audio_base64,
-                                            "mimeType": inline_data.get("mimeType")
-                                        })
-                                    text = part.get("text")
-                                    if text:
-                                        await websocket.send_json({
-                                            "type": "text",
-                                            "text": text
+                                            "data": b64_audio
                                         })
 
-                            turn_complete = server_content.get("turnComplete")
-                            if turn_complete:
-                                await websocket.send_json({"type": "turnComplete"})
-                            
-                            interrupted = server_content.get("interrupted")
-                            if interrupted:
-                                await websocket.send_json({"type": "interrupted"})
+                                # 2. User & Agent transcription
+                                in_tx = getattr(server_content, "input_transcription", None)
+                                if in_tx and getattr(in_tx, "text", None):
+                                    await websocket.send_json({
+                                        "type": "userText",
+                                        "text": in_tx.text
+                                    })
 
-                except websockets.exceptions.ConnectionClosed:
-                    pass
+                                out_tx = getattr(server_content, "output_transcription", None)
+                                if out_tx and getattr(out_tx, "text", None):
+                                    await websocket.send_json({
+                                        "type": "text",
+                                        "text": out_tx.text
+                                    })
+
+                                # 3. Status events
+                                if getattr(server_content, "turn_complete", False):
+                                    await websocket.send_json({"type": "turnComplete"})
+                                
+                                if getattr(server_content, "interrupted", False):
+                                    await websocket.send_json({"type": "interrupted"})
+
                 except Exception as e:
-                    logger.error(f"gemini_to_client error: {e}")
+                    logger.error(f"pump_gemini_to_browser error: {e}")
 
-            await asyncio.gather(client_to_gemini(), gemini_to_client())
+            await asyncio.gather(pump_browser_to_gemini(), pump_gemini_to_browser())
 
     except Exception as e:
-        logger.error(f"WebSocket Gemini Live error: {e}")
+        logger.error(f"Gemini Live session error: {e}")
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
         except:

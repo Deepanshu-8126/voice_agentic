@@ -191,9 +191,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 ))
               ) : (
                 <>
-                  <option value="gemini-3.8-flash">Gemini 3.8 Flash (Latest)</option>
-                  <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
-                  <option value="gemini-flash-latest">Gemini Flash Latest</option>
+                  <option value="gemini-3.7-flash">Gemini 3.7 Flash (Stable)</option>
+                  <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                  <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                  <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
                 </>
               )}
             </select>

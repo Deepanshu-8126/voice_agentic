@@ -18,7 +18,7 @@ export const App: React.FC = () => {
     }
     return {
       apiKey: '',
-      selectedModel: 'gemini-3.8-flash',
+      selectedModel: 'gemini-3.7-flash',
       selectedVoice: 'Aoede',
       systemPrompt: 'You are an intelligent, helpful, and concise AI assistant.',
       temperature: 0.7,

@@ -1,7 +1,10 @@
-// Audio processing utilities for PCM 16kHz Mic capture and PCM 24kHz Live playback
+// High-precision Audio processing utilities for Gemini Live Voice
+// Mic Capture: Native Hardware AudioContext -> Linear Interpolation Resampler -> 16kHz PCM Int16
+// AI Playback: 24kHz PCM Int16 -> 24kHz Float32 -> Dedicated Playback Context
 
 export class AudioProcessor {
-  private audioCtx: AudioContext | null = null;
+  private micCtx: AudioContext | null = null;
+  private playbackCtx: AudioContext | null = null;
   private micStream: MediaStream | null = null;
   private processorNode: ScriptProcessorNode | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
@@ -10,15 +13,19 @@ export class AudioProcessor {
   private nextPlayTime: number = 0;
   private isPlayingAudio: boolean = false;
 
-  public initContext(): AudioContext {
-    if (!this.audioCtx || this.audioCtx.state === 'closed') {
+  public initPlaybackContext(): AudioContext {
+    if (!this.playbackCtx || this.playbackCtx.state === 'closed') {
       const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-      this.audioCtx = new AudioCtxClass({ sampleRate: 24000 });
+      this.playbackCtx = new AudioCtxClass({ sampleRate: 24000 });
     }
-    if (this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+    if (this.playbackCtx.state === 'suspended') {
+      this.playbackCtx.resume();
     }
-    return this.audioCtx;
+    return this.playbackCtx;
+  }
+
+  public initContext(): AudioContext {
+    return this.initPlaybackContext();
   }
 
   public getAnalyser(): AnalyserNode | null {
@@ -29,38 +36,45 @@ export class AudioProcessor {
     return this.outputAnalyserNode;
   }
 
-  // Start Mic Capture at 16kHz PCM
+  // Start Mic Capture using native hardware rate, then cleanly downsample to 16kHz
   public async startMicCapture(onPcmChunk: (base64Data: string) => void): Promise<AnalyserNode> {
-    const ctx = this.initContext();
+    const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+    // Let browser choose its native hardware sample rate (typically 44.1kHz or 48kHz)
+    this.micCtx = new AudioCtxClass();
+    if (this.micCtx.state === 'suspended') {
+      await this.micCtx.resume();
+    }
 
-    // High quality microphone constraints with noise suppression and echo cancellation
     this.micStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
-        sampleRate: 16000,
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
       }
     });
 
-    this.sourceNode = ctx.createMediaStreamSource(this.micStream);
-    this.analyserNode = ctx.createAnalyser();
+    this.sourceNode = this.micCtx.createMediaStreamSource(this.micStream);
+    this.analyserNode = this.micCtx.createAnalyser();
     this.analyserNode.fftSize = 256;
     this.analyserNode.smoothingTimeConstant = 0.8;
 
-    // Buffer size 2048 or 4096 (low latency)
-    this.processorNode = ctx.createScriptProcessor(2048, 1, 1);
+    // Buffer size 2048
+    this.processorNode = this.micCtx.createScriptProcessor(2048, 1, 1);
 
     this.sourceNode.connect(this.analyserNode);
     this.analyserNode.connect(this.processorNode);
-    this.processorNode.connect(ctx.destination);
+    this.processorNode.connect(this.micCtx.destination);
+
+    const inSampleRate = this.micCtx.sampleRate;
+    const targetSampleRate = 16000;
 
     this.processorNode.onaudioprocess = (e) => {
       const inputData = e.inputBuffer.getChannelData(0);
       
-      // Resample / downsample to 16000 Hz PCM Int16
-      const pcm16 = this.floatTo16BitPCM(inputData);
+      // High-quality Linear Interpolation Downsampling to 16000 Hz
+      const samples16k = this.downsampleTo16kHz(inputData, inSampleRate, targetSampleRate);
+      const pcm16 = this.floatTo16BitPCM(samples16k);
       const base64Chunk = this.arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
       onPcmChunk(base64Chunk);
     };
@@ -81,11 +95,15 @@ export class AudioProcessor {
       this.micStream.getTracks().forEach(track => track.stop());
       this.micStream = null;
     }
+    if (this.micCtx && this.micCtx.state !== 'closed') {
+      this.micCtx.close();
+      this.micCtx = null;
+    }
   }
 
   // Play incoming PCM 24kHz Audio chunk smoothly
   public playPcmChunk(base64Data: string) {
-    const ctx = this.initContext();
+    const ctx = this.initPlaybackContext();
     if (!this.outputAnalyserNode) {
       this.outputAnalyserNode = ctx.createAnalyser();
       this.outputAnalyserNode.fftSize = 256;
@@ -101,11 +119,15 @@ export class AudioProcessor {
         bytes[i] = binaryStr.charCodeAt(i);
       }
 
-      // Convert 16-bit PCM (signed Int16) to Float32
-      const int16Array = new Int16Array(bytes.buffer);
-      const float32Array = new Float32Array(int16Array.length);
-      for (let i = 0; i < int16Array.length; i++) {
-        float32Array[i] = int16Array[i] / 32768.0;
+      // Convert 16-bit PCM (Little-Endian) to Float32
+      const dataView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const numSamples = Math.floor(bytes.byteLength / 2);
+      if (numSamples === 0) return;
+
+      const float32Array = new Float32Array(numSamples);
+      for (let i = 0; i < numSamples; i++) {
+        const int16 = dataView.getInt16(i * 2, true);
+        float32Array[i] = int16 / 32768.0;
       }
 
       // Create AudioBuffer (24000 Hz, 1 channel)
@@ -118,7 +140,7 @@ export class AudioProcessor {
 
       const currentTime = ctx.currentTime;
       if (this.nextPlayTime < currentTime) {
-        this.nextPlayTime = currentTime + 0.05; // small jitter buffer
+        this.nextPlayTime = currentTime + 0.03;
       }
 
       source.start(this.nextPlayTime);
@@ -136,14 +158,40 @@ export class AudioProcessor {
   }
 
   public resetPlayback() {
-    if (this.audioCtx) {
-      this.nextPlayTime = this.audioCtx.currentTime;
+    if (this.playbackCtx) {
+      this.nextPlayTime = this.playbackCtx.currentTime;
     }
     this.isPlayingAudio = false;
   }
 
   public isSpeaking(): boolean {
     return this.isPlayingAudio;
+  }
+
+  // Linear interpolation resampler for clear, natural speech transmission
+  private downsampleTo16kHz(buffer: Float32Array, inSampleRate: number, outSampleRate: number): Float32Array {
+    if (inSampleRate === outSampleRate) {
+      return buffer;
+    }
+    const sampleRateRatio = inSampleRate / outSampleRate;
+    const newLength = Math.round(buffer.length / sampleRateRatio);
+    const result = new Float32Array(newLength);
+    let offsetResult = 0;
+    let offsetBuffer = 0;
+
+    while (offsetResult < result.length) {
+      const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+      let accum = 0;
+      let count = 0;
+      for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+        accum += buffer[i];
+        count++;
+      }
+      result[offsetResult] = count > 0 ? accum / count : 0;
+      offsetResult++;
+      offsetBuffer = nextOffsetBuffer;
+    }
+    return result;
   }
 
   // Convert Float32 to Int16 PCM
@@ -168,9 +216,9 @@ export class AudioProcessor {
 
   public destroy() {
     this.stopMicCapture();
-    if (this.audioCtx && this.audioCtx.state !== 'closed') {
-      this.audioCtx.close();
-      this.audioCtx = null;
+    if (this.playbackCtx && this.playbackCtx.state !== 'closed') {
+      this.playbackCtx.close();
+      this.playbackCtx = null;
     }
   }
 }

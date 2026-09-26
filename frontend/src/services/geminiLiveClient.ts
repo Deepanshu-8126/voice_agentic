@@ -3,6 +3,7 @@
 export interface LiveClientCallbacks {
   onAudioData: (base64Audio: string, mimeType?: string) => void;
   onTextData: (text: string) => void;
+  onUserTextData?: (text: string) => void;
   onTurnComplete: () => void;
   onInterrupted: () => void;
   onError: (error: string) => void;
@@ -30,7 +31,7 @@ export class GeminiLiveClient {
     const params = new URLSearchParams({
       apiKey: config.apiKey,
       voice: config.voice || 'Aoede',
-      model: config.model || 'models/gemini-2.0-flash-exp',
+      model: config.model || 'models/gemini-3.1-flash-live-preview',
       system_prompt: config.systemPrompt || 'You are an intelligent, low-latency, warm conversational voice assistant.'
     });
 
@@ -54,6 +55,8 @@ export class GeminiLiveClient {
             this.callbacks?.onAudioData(data.data, data.mimeType);
           } else if (data.type === 'text') {
             this.callbacks?.onTextData(data.text);
+          } else if (data.type === 'userText') {
+            this.callbacks?.onUserTextData?.(data.text);
           } else if (data.type === 'turnComplete') {
             this.callbacks?.onTurnComplete();
           } else if (data.type === 'interrupted') {

@@ -6,13 +6,14 @@ import logging
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, UploadFile, File, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import websockets
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 # Load environment variables
 env_path = Path(__file__).parent / ".env"
@@ -23,7 +24,6 @@ logger = logging.getLogger("ai_dashboard")
 
 app = FastAPI(title="Kilo AI Voice & Chat Dashboard API", version="1.0.0")
 
-# Enable CORS for local dev
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,19 +35,18 @@ app.add_middleware(
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
 def get_api_key(client_key: Optional[str] = None) -> str:
-    key = client_key.strip() if client_key and client_key.strip() else GEMINI_API_KEY
+    key = client_key.strip() if client_key and client_key.strip() else os.getenv("GOOGLE_API_KEY", "")
     if not key:
         raise HTTPException(status_code=400, detail="Gemini API Key missing. Please provide it in Settings or .env file.")
     return key
 
-# Models
 class Message(BaseModel):
     role: str # "user" or "model" or "assistant"
     content: str
 
 class ChatRequest(BaseModel):
     messages: List[Message]
-    model: Optional[str] = "gemini-2.0-flash"
+    model: Optional[str] = "gemini-3.8-flash"
     system_prompt: Optional[str] = "You are a helpful, intelligent, fast, and friendly AI assistant."
     temperature: Optional[float] = 0.7
     apiKey: Optional[str] = None
@@ -57,10 +56,11 @@ class KeyVerifyRequest(BaseModel):
 
 @app.get("/api/health")
 async def health_check():
+    key = os.getenv("GOOGLE_API_KEY", "")
     return {
         "status": "ok",
-        "has_server_key": bool(GEMINI_API_KEY and len(GEMINI_API_KEY) > 5),
-        "default_model": os.getenv("DEFAULT_MODEL", "gemini-2.0-flash"),
+        "has_server_key": bool(key and len(key) > 5),
+        "default_model": os.getenv("DEFAULT_MODEL", "gemini-3.8-flash"),
         "default_voice": os.getenv("DEFAULT_VOICE", "Aoede")
     }
 
@@ -68,10 +68,11 @@ async def health_check():
 async def verify_key(req: KeyVerifyRequest):
     key = get_api_key(req.apiKey)
     try:
-        genai.configure(api_key=key)
-        # Test key with a fast query
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        res = model.generate_content("Hi", generation_config={"max_output_tokens": 5})
+        client = genai.Client(api_key=key)
+        res = client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents="Hi"
+        )
         return {"valid": True, "message": "API Key is valid and active!"}
     except Exception as e:
         logger.error(f"Key verification error: {e}")
@@ -82,62 +83,49 @@ async def verify_key(req: KeyVerifyRequest):
 
 @app.get("/api/models")
 async def list_models(key: Optional[str] = None):
-    try:
-        active_key = get_api_key(key)
-        genai.configure(api_key=active_key)
-        models = [
-            {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash (Fastest & Best Live)", "isDefault": True},
-            {"id": "gemini-2.0-flash-lite-preview-02-05", "name": "Gemini 2.0 Flash Lite", "isDefault": False},
-            {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "isDefault": False},
-            {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro (Deep Reasoning)", "isDefault": False},
+    return {
+        "models": [
+            {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash (Fastest & Best Live)", "isDefault": True},
+            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash", "isDefault": False},
+            {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "isDefault": False},
+            {"id": "gemini-flash-latest", "name": "Gemini Flash Latest", "isDefault": False},
+            {"id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro (Deep Reasoning)", "isDefault": False},
         ]
-        return {"models": models}
-    except Exception:
-        # Fallback list
-        return {
-            "models": [
-                {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash (Default)", "isDefault": True},
-                {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "isDefault": False},
-                {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "isDefault": False},
-            ]
-        }
+    }
 
 @app.post("/api/chat/stream")
 async def chat_stream(req: ChatRequest):
     active_key = get_api_key(req.apiKey)
-    genai.configure(api_key=active_key)
+    client = genai.Client(api_key=active_key)
 
-    # Format history for Gemini SDK
-    history = []
-    for msg in req.messages[:-1]:
+    # Format history
+    contents = []
+    for msg in req.messages:
         role = "user" if msg.role == "user" else "model"
-        history.append({
-            "role": role,
-            "parts": [msg.content]
-        })
+        contents.append(types.Content(
+            role=role,
+            parts=[types.Part.from_text(text=msg.content)]
+        ))
 
-    last_user_msg = req.messages[-1].content if req.messages else ""
+    model_name = req.model or "gemini-3.8-flash"
 
     async def event_generator():
         try:
-            model = genai.GenerativeModel(
-                model_name=req.model or "gemini-2.0-flash",
+            config = types.GenerateContentConfig(
+                temperature=req.temperature or 0.7,
                 system_instruction=req.system_prompt
             )
-            chat = model.start_chat(history=history)
-            response = chat.send_message(
-                last_user_msg,
-                stream=True,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=req.temperature or 0.7,
-                )
+            response = client.models.generate_content_stream(
+                model=model_name,
+                contents=contents,
+                config=config
             )
 
             for chunk in response:
                 if chunk.text:
                     payload = json.dumps({"text": chunk.text})
                     yield f"data: {payload}\n\n"
-                    await asyncio.sleep(0.005) # smooth stream
+                    await asyncio.sleep(0.005)
 
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
@@ -158,26 +146,27 @@ async def chat_stream(req: ChatRequest):
 async def voice_turn(
     audio: UploadFile = File(...),
     system_prompt: Optional[str] = Form("You are a helpful, natural conversational voice assistant. Keep answers clear and concise for spoken audio."),
-    model_name: Optional[str] = Form("gemini-2.0-flash"),
+    model_name: Optional[str] = Form("gemini-3.8-flash"),
     api_key: Optional[str] = Form(None)
 ):
-    """Fallback high-accuracy Voice turn endpoint for any browser/device"""
     active_key = get_api_key(api_key)
-    genai.configure(api_key=active_key)
+    client = genai.Client(api_key=active_key)
 
     try:
         audio_bytes = await audio.read()
         mime_type = audio.content_type or "audio/webm"
 
-        model = genai.GenerativeModel(
-            model_name=model_name or "gemini-2.0-flash",
-            system_instruction=system_prompt
+        part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+        response = client.models.generate_content(
+            model=model_name or "gemini-3.8-flash",
+            contents=[
+                part,
+                "Listen to this user speech. Answer naturally, clearly and conversationally."
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt
+            )
         )
-
-        response = model.generate_content([
-            {"mime_type": mime_type, "data": audio_bytes},
-            "Listen to this user speech. Answer naturally, clearly and conversationally. Also provide the user transcript if applicable."
-        ])
 
         return {
             "text": response.text,
@@ -187,7 +176,6 @@ async def voice_turn(
         logger.error(f"Voice turn error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Gemini Multimodal Live WebSocket Relay for Realtime Bidirectional Voice
 GEMINI_LIVE_WS_HOST = "generativelanguage.googleapis.com"
 GEMINI_LIVE_WS_PATH = "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
 
@@ -201,8 +189,7 @@ async def websocket_gemini_live(
 ):
     await websocket.accept()
     
-    # Resolve key
-    key = apiKey or GEMINI_API_KEY
+    key = apiKey or os.getenv("GOOGLE_API_KEY", "")
     if not key:
         await websocket.send_json({"type": "error", "message": "Gemini API key is required."})
         await websocket.close(code=4001)
@@ -213,7 +200,6 @@ async def websocket_gemini_live(
 
     try:
         async with websockets.connect(gemini_uri, subprotocols=["protocol-v1"]) as gemini_ws:
-            # 1. Send Setup Configuration to Gemini Live
             model_id = model if model.startswith("models/") else f"models/{model}"
             setup_msg = {
                 "setup": {
@@ -237,7 +223,6 @@ async def websocket_gemini_live(
             logger.info("Sent setup config to Gemini Live")
             await websocket.send_json({"type": "connected", "message": "Connected to Gemini Live Voice Agent"})
 
-            # Tasks for bidirectional pump
             async def client_to_gemini():
                 try:
                     while True:
@@ -246,7 +231,6 @@ async def websocket_gemini_live(
                         msg_type = data.get("type")
 
                         if msg_type == "audio":
-                            # Base64 PCM 16kHz audio chunk from mic
                             pcm_base64 = data.get("data")
                             if pcm_base64:
                                 payload = {
@@ -274,11 +258,8 @@ async def websocket_gemini_live(
                                 }
                             }
                             await gemini_ws.send(json.dumps(payload))
-                        elif msg_type == "interrupt":
-                            # End/interrupt turn
-                            pass
                 except WebSocketDisconnect:
-                    logger.info("Client disconnected from WebSocket")
+                    pass
                 except Exception as e:
                     logger.error(f"client_to_gemini error: {e}")
 
@@ -286,13 +267,11 @@ async def websocket_gemini_live(
                 try:
                     async for raw_msg in gemini_ws:
                         resp = json.loads(raw_msg)
-                        # Check for server content
                         server_content = resp.get("serverContent")
                         if server_content:
                             model_turn = server_content.get("modelTurn")
                             if model_turn:
                                 for part in model_turn.get("parts", []):
-                                    # Audio part
                                     inline_data = part.get("inlineData")
                                     if inline_data and inline_data.get("mimeType", "").startswith("audio/"):
                                         audio_base64 = inline_data.get("data")
@@ -301,7 +280,6 @@ async def websocket_gemini_live(
                                             "data": audio_base64,
                                             "mimeType": inline_data.get("mimeType")
                                         })
-                                    # Text/transcript part
                                     text = part.get("text")
                                     if text:
                                         await websocket.send_json({
@@ -318,7 +296,7 @@ async def websocket_gemini_live(
                                 await websocket.send_json({"type": "interrupted"})
 
                 except websockets.exceptions.ConnectionClosed:
-                    logger.info("Gemini WebSocket closed")
+                    pass
                 except Exception as e:
                     logger.error(f"gemini_to_client error: {e}")
 

@@ -1,5 +1,5 @@
 // High-precision Audio processing utilities for Gemini Live Voice
-// Features instant interrupt (barge-in) stopping active AudioBufferSourceNodes
+// Features smooth jitter-free Web Audio scheduler and instant barge-in interrupt
 
 export class AudioProcessor {
   private micCtx: AudioContext | null = null;
@@ -12,6 +12,7 @@ export class AudioProcessor {
   private nextPlayTime: number = 0;
   private isPlayingAudio: boolean = false;
   private activeSources: Set<AudioBufferSourceNode> = new Set();
+  private readonly INITIAL_BUFFER_DELAY = 0.08; // 80ms jitter buffer for smooth network playback
 
   public initPlaybackContext(): AudioContext {
     if (!this.playbackCtx || this.playbackCtx.state === 'closed') {
@@ -101,7 +102,7 @@ export class AudioProcessor {
     }
   }
 
-  // Play incoming PCM 24kHz Audio chunk smoothly
+  // Play incoming PCM 24kHz Audio chunk smoothly with jitter buffering & micro cross-fading
   public playPcmChunk(base64Data: string) {
     const ctx = this.initPlaybackContext();
     if (ctx.state === 'suspended') {
@@ -133,6 +134,14 @@ export class AudioProcessor {
         float32Array[i] = int16 / 32768.0;
       }
 
+      // Micro-smoothing at boundary edges to prevent pop / crackle clicks
+      if (float32Array.length > 32) {
+        for (let i = 0; i < 16; i++) {
+          float32Array[i] *= (i / 16);
+          float32Array[float32Array.length - 1 - i] *= (i / 16);
+        }
+      }
+
       // Create AudioBuffer (24000 Hz, 1 channel)
       const audioBuffer = ctx.createBuffer(1, float32Array.length, 24000);
       audioBuffer.getChannelData(0).set(float32Array);
@@ -140,11 +149,11 @@ export class AudioProcessor {
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(this.outputAnalyserNode);
-      source.connect(ctx.destination);
 
       const currentTime = ctx.currentTime;
+      // If buffer ran dry due to network latency, schedule with small safety gap to eliminate underrun crackles
       if (this.nextPlayTime < currentTime) {
-        this.nextPlayTime = currentTime + 0.01;
+        this.nextPlayTime = currentTime + this.INITIAL_BUFFER_DELAY;
       }
 
       source.start(this.nextPlayTime);

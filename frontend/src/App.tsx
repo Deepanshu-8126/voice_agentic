@@ -45,7 +45,10 @@ export const App: React.FC = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  });
 
   const abortControllerRef = useRef<boolean>(false);
 
@@ -59,13 +62,24 @@ export const App: React.FC = () => {
     localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
   }, [conversations]);
 
+  // Handle window resize for mobile responsiveness
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Health check and load models on startup
   useEffect(() => {
     const initApp = async () => {
       try {
         const health = await checkHealth();
         if (health.has_server_key && !settings.apiKey) {
-          // Server has key configured in .env
+          // Server key configured
         }
         const modelList = await fetchModels(settings.apiKey);
         setModels(modelList);
@@ -102,10 +116,12 @@ export const App: React.FC = () => {
 
     setConversations(prev => [newConv, ...prev]);
     setActiveId(newConv.id);
+    setIsMobileSidebarOpen(false);
   };
 
   const handleSelectConversation = (id: string) => {
     setActiveId(id);
+    setIsMobileSidebarOpen(false);
   };
 
   const handleDeleteConversation = (id: string) => {
@@ -144,7 +160,6 @@ export const App: React.FC = () => {
     let targetId = activeId;
     let currentConv = activeConversation;
 
-    // If no active conversation, create one
     if (!targetId || !currentConv) {
       const newConv: Conversation = {
         id: 'conv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
@@ -160,7 +175,6 @@ export const App: React.FC = () => {
       currentConv = newConv;
     }
 
-    // Auto rename first message title
     if (currentConv.messages.length === 0) {
       const title = text.length > 28 ? text.slice(0, 28) + '...' : text;
       handleRenameConversation(targetId, title);
@@ -182,7 +196,6 @@ export const App: React.FC = () => {
       isStreaming: true
     };
 
-    // Update conversation with user and empty streaming assistant message
     const updatedMessages = [...currentConv.messages, userMessage, assistantMessage];
     setConversations(prev =>
       prev.map(c => (c.id === targetId ? { ...c, messages: updatedMessages, updatedAt: Date.now() } : c))
@@ -302,21 +315,41 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-chatBg-main text-gray-100">
+    <div className="flex h-screen w-screen overflow-hidden bg-chatBg-main text-gray-100 relative">
       
-      {/* Sidebar */}
-      <Sidebar
-        conversations={conversations}
-        activeId={activeId}
-        onSelectConversation={handleSelectConversation}
-        onNewChat={handleNewChat}
-        onDeleteConversation={handleDeleteConversation}
-        onRenameConversation={handleRenameConversation}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-      />
+      {/* Mobile Drawer Backdrop */}
+      {isMobileSidebarOpen && (
+        <div
+          onClick={() => setIsMobileSidebarOpen(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+        />
+      )}
+
+      {/* Sidebar (Desktop + Mobile Slide-over Drawer) */}
+      <div
+        className={`fixed md:static inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out ${
+          isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
+        <Sidebar
+          conversations={conversations}
+          activeId={activeId}
+          onSelectConversation={handleSelectConversation}
+          onNewChat={handleNewChat}
+          onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={handleRenameConversation}
+          onOpenSettings={() => {
+            setIsSettingsOpen(true);
+            setIsMobileSidebarOpen(false);
+          }}
+          onOpenVoiceModal={() => {
+            setIsVoiceModalOpen(true);
+            setIsMobileSidebarOpen(false);
+          }}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        />
+      </div>
 
       {/* Main Chat Area */}
       <ChatArea
@@ -327,7 +360,13 @@ export const App: React.FC = () => {
         onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onClearCurrentChat={handleClearCurrentChat}
-        onToggleSidebar={() => setIsSidebarCollapsed(false)}
+        onToggleSidebar={() => {
+          if (window.innerWidth < 768) {
+            setIsMobileSidebarOpen(true);
+          } else {
+            setIsSidebarCollapsed(false);
+          }
+        }}
         isSidebarCollapsed={isSidebarCollapsed}
         settings={settings}
         onModelChange={handleModelChange}

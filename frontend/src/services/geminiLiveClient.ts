@@ -4,6 +4,7 @@ export interface LiveClientCallbacks {
   onAudioData: (base64Audio: string, mimeType?: string) => void;
   onTextData: (text: string) => void;
   onUserTextData?: (text: string) => void;
+  onAgentAction?: (action: { tool: string; args?: any; result?: any; status: 'executing' | 'completed' }) => void;
   onTurnComplete: () => void;
   onInterrupted: () => void;
   onError: (error: string) => void;
@@ -35,7 +36,11 @@ export class GeminiLiveClient {
       system_prompt: config.systemPrompt || 'You are an intelligent, low-latency, warm conversational voice assistant.'
     });
 
-    const wsUrl = `ws://127.0.0.1:8008/ws/live?${params.toString()}`;
+    const defaultWs = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8008')
+      .replace(/^http:\/\//, 'ws://')
+      .replace(/^https:\/\//, 'wss://');
+    const baseWsUrl = import.meta.env.VITE_WS_BASE_URL || defaultWs;
+    const wsUrl = `${baseWsUrl}/ws/live?${params.toString()}`;
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -57,6 +62,8 @@ export class GeminiLiveClient {
             this.callbacks?.onTextData(data.text);
           } else if (data.type === 'userText') {
             this.callbacks?.onUserTextData?.(data.text);
+          } else if (data.type === 'agentAction') {
+            this.callbacks?.onAgentAction?.(data);
           } else if (data.type === 'turnComplete') {
             this.callbacks?.onTurnComplete();
           } else if (data.type === 'interrupted') {

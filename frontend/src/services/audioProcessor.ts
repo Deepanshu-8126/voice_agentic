@@ -59,10 +59,13 @@ export class AudioProcessor {
     this.analyserNode.smoothingTimeConstant = 0.8;
 
     this.processorNode = this.micCtx.createScriptProcessor(2048, 1, 1);
+    const silentGain = this.micCtx.createGain();
+    silentGain.gain.value = 0.0;
 
     this.sourceNode.connect(this.analyserNode);
     this.analyserNode.connect(this.processorNode);
-    this.processorNode.connect(this.micCtx.destination);
+    this.processorNode.connect(silentGain);
+    silentGain.connect(this.micCtx.destination);
 
     const inSampleRate = this.micCtx.sampleRate;
     const targetSampleRate = 16000;

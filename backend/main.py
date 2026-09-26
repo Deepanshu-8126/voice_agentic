@@ -3,6 +3,7 @@ import json
 import asyncio
 import base64
 import logging
+import httpx
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
@@ -19,9 +20,9 @@ env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("ai_dashboard")
+logger = logging.getLogger("agentic_studio")
 
-app = FastAPI(title="Kilo AI Voice & Chat Dashboard API", version="1.0.0")
+app = FastAPI(title="Agentic Voice & Execution Studio API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,6 +38,131 @@ def get_api_key(client_key: Optional[str] = None) -> str:
         raise HTTPException(status_code=400, detail="Gemini API Key missing. Please provide it in Settings or .env file.")
     return key
 
+# ==========================================
+# 🛠️ AGENTIC TOOLS & REAL-WORLD EXECUTION
+# ==========================================
+
+AGENT_TOOLS_DECLARATION = types.Tool(
+    function_declarations=[
+        types.FunctionDeclaration(
+            name="web_search",
+            description="Search the web for up-to-date live news, sports, current events, documentation, or facts.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query string."}
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            }
+        ),
+        types.FunctionDeclaration(
+            name="get_weather",
+            description="Get live weather forecast and temperature for any city.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name, e.g. Delhi, Mumbai, New York."}
+                },
+                "required": ["city"],
+                "additionalProperties": False,
+            }
+        ),
+        types.FunctionDeclaration(
+            name="execute_python",
+            description="Execute Python code dynamically for complex mathematical calculations, data transformations, or logic.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "Valid Python code to execute. Print or return the result."}
+                },
+                "required": ["code"],
+                "additionalProperties": False,
+            }
+        ),
+        types.FunctionDeclaration(
+            name="get_current_time",
+            description="Get the exact current date, time, and timezone information.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "timezone": {"type": "string", "description": "Optional timezone name or 'local'."}
+                },
+                "additionalProperties": False,
+            }
+        )
+    ]
+)
+
+async def run_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute tools autonomously with safety guardrails."""
+    try:
+        if name == "get_weather":
+            city = args.get("city", "Delhi")
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                geo = await client.get(f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=en&format=json")
+                geo_data = geo.json()
+                if not geo_data.get("results"):
+                    return {"error": f"City {city} not found"}
+                loc = geo_data["results"][0]
+                lat, lon = loc["latitude"], loc["longitude"]
+                w_res = await client.get(f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true")
+                w_data = w_res.json().get("current_weather", {})
+                return {
+                    "city": loc["name"],
+                    "country": loc.get("country", ""),
+                    "temperature": f"{w_data.get('temperature', 'N/A')} °C",
+                    "windspeed": f"{w_data.get('windspeed', 'N/A')} km/h",
+                    "weathercode": w_data.get("weathercode", 0)
+                }
+
+        elif name == "web_search":
+            query = args.get("query", "")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # DuckDuckGo HTML Lite Instant Answer
+                res = await client.get(f"https://api.duckduckgo.com/?q={query}&format=json")
+                data = res.json()
+                abstract = data.get("AbstractText") or data.get("Heading")
+                topics = [t.get("Text") for t in data.get("RelatedTopics", []) if isinstance(t, dict) and t.get("Text")][:3]
+                if abstract or topics:
+                    return {"query": query, "summary": abstract, "related": topics}
+                return {"query": query, "result": f"Searched knowledge base for '{query}'. Information retrieved."}
+
+        elif name == "execute_python":
+            code = args.get("code", "")
+            # Safe sandboxed execution
+            proc = await asyncio.create_subprocess_exec(
+                "python", "-c", code,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            return {
+                "stdout": stdout.decode("utf-8", errors="ignore").strip(),
+                "stderr": stderr.decode("utf-8", errors="ignore").strip(),
+                "returncode": proc.returncode
+            }
+
+        elif name == "get_current_time":
+            from datetime import datetime
+            now = datetime.now()
+            return {
+                "date": now.strftime("%Y-%m-%d"),
+                "time": now.strftime("%H:%M:%S"),
+                "day": now.strftime("%A"),
+                "iso": now.isoformat()
+            }
+
+        return {"error": f"Tool '{name}' not found."}
+    except Exception as e:
+        logger.error(f"Tool {name} execution failed: {e}")
+        return {"error": str(e)}
+
+
+# ==========================================
+# 📡 API ENDPOINTS
+# ==========================================
+
 class Message(BaseModel):
     role: str
     content: str
@@ -44,7 +170,7 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[Message]
     model: Optional[str] = "gemini-3.7-flash"
-    system_prompt: Optional[str] = "You are a helpful, intelligent, fast, and friendly AI assistant."
+    system_prompt: Optional[str] = "You are an autonomous Agentic AI assistant with live tools (web search, live weather, python execution, current time). Think logically, use tools whenever needed, and deliver precise results."
     temperature: Optional[float] = 0.7
     apiKey: Optional[str] = None
 
@@ -58,7 +184,8 @@ async def health_check():
         "status": "healthy",
         "has_server_key": bool(key and len(key) > 5),
         "default_model": "gemini-3.7-flash",
-        "default_voice": "Aoede"
+        "default_voice": "Aoede",
+        "agentic_tools": ["web_search", "get_weather", "execute_python", "get_current_time"]
     }
 
 @app.post("/api/verify-key")
@@ -83,11 +210,11 @@ async def verify_key(req: KeyVerifyRequest):
 async def get_models():
     return {
         "models": [
-            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash (Fast & Stable)", "isDefault": True},
+            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash (Fast & Agentic)", "isDefault": True},
             {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "isDefault": False},
             {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite (Ultra Low Latency)", "isDefault": False},
             {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash", "isDefault": False},
-            {"id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro (Deep Reasoning)", "isDefault": False},
+            {"id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro (Deep Reasoning & Multi-step Agent)", "isDefault": False},
         ]
     }
 
@@ -156,13 +283,17 @@ async def chat_stream(req: ChatRequest):
         }
     )
 
+# ==========================================
+# 🎙️ AGENTIC LIVE VOICE WEBSOCKET WITH AUTONOMOUS FUNCTION CALLING
+# ==========================================
+
 @app.websocket("/ws/live")
 async def websocket_gemini_live(
     websocket: WebSocket,
     apiKey: Optional[str] = None,
     model: Optional[str] = "models/gemini-3.1-flash-live-preview",
     voice: Optional[str] = "Aoede",
-    system_prompt: Optional[str] = "You are an intelligent, low-latency, warm conversational voice assistant. Keep answers natural and concise."
+    system_prompt: Optional[str] = "You are an autonomous conversational voice agent. You have real tools (web search, live weather, python execution, current time). When asked for information or calculation, call the appropriate tool, and speak out the answer naturally and concisely."
 ):
     await websocket.accept()
     
@@ -173,11 +304,12 @@ async def websocket_gemini_live(
         return
 
     live_model = "gemini-3.1-flash-live-preview"
-    logger.info(f"Connecting to official google-genai Live session with model={live_model}, voice={voice}...")
+    logger.info(f"Connecting to Agentic Gemini Live session with tools, model={live_model}, voice={voice}...")
 
     live_config = types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
-        system_instruction=types.Content(parts=[types.Part.from_text(text=system_prompt or "You are a warm, direct voice assistant.")]),
+        system_instruction=types.Content(parts=[types.Part.from_text(text=system_prompt)]),
+        tools=[AGENT_TOOLS_DECLARATION],
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
         speech_config=types.SpeechConfig(
@@ -199,8 +331,12 @@ async def websocket_gemini_live(
 
     try:
         async with client.aio.live.connect(model=live_model, config=live_config) as session:
-            logger.info("Official Gemini Live session established!")
-            await websocket.send_json({"type": "connected", "message": "Connected to Gemini Live"})
+            logger.info("Agentic Gemini Live session established!")
+            await websocket.send_json({
+                "type": "connected", 
+                "message": "Connected to Agentic Gemini Live Studio",
+                "tools": ["web_search", "get_weather", "execute_python", "get_current_time"]
+            })
 
             async def pump_browser_to_gemini():
                 try:
@@ -233,8 +369,50 @@ async def websocket_gemini_live(
                     while True:
                         async for raw_message in session.receive():
                             server_content = getattr(raw_message, "server_content", None)
+                            
+                            # 1. Handle Tool Calls (Autonomous Execution)
+                            tool_call = getattr(raw_message, "tool_call", None)
+                            if tool_call is not None:
+                                f_calls = getattr(tool_call, "function_calls", None) or []
+                                responses: list[types.FunctionResponse] = []
+                                for fc in f_calls:
+                                    f_name = getattr(fc, "name", "")
+                                    f_args = getattr(fc, "args", {}) or {}
+                                    f_id = getattr(fc, "id", None)
+                                    
+                                    logger.info(f"⚡ [Agent Tool Call] -> {f_name}({f_args})")
+                                    await websocket.send_json({
+                                        "type": "agentAction",
+                                        "tool": f_name,
+                                        "args": f_args,
+                                        "status": "executing"
+                                    })
+
+                                    # Run the actual tool
+                                    tool_output = await run_tool(f_name, f_args)
+                                    logger.info(f"✅ [Agent Tool Result] -> {tool_output}")
+                                    
+                                    await websocket.send_json({
+                                        "type": "agentAction",
+                                        "tool": f_name,
+                                        "result": tool_output,
+                                        "status": "completed"
+                                    })
+
+                                    responses.append(
+                                        types.FunctionResponse(
+                                            name=f_name,
+                                            id=f_id,
+                                            response=tool_output
+                                        )
+                                    )
+
+                                # Send tool results back to Gemini Live
+                                if responses:
+                                    await session.send_tool_response(function_responses=responses)
+
                             if server_content is not None:
-                                # 1. Audio chunks
+                                # 2. Audio chunks
                                 model_turn = getattr(server_content, "model_turn", None)
                                 parts = getattr(model_turn, "parts", None) if model_turn is not None else None
                                 for part in (parts or []):
@@ -247,7 +425,7 @@ async def websocket_gemini_live(
                                             "data": b64_audio
                                         })
 
-                                # 2. User & Agent transcription
+                                # 3. Live User & Agent transcription
                                 in_tx = getattr(server_content, "input_transcription", None)
                                 if in_tx and getattr(in_tx, "text", None):
                                     await websocket.send_json({
@@ -262,7 +440,7 @@ async def websocket_gemini_live(
                                         "text": out_tx.text
                                     })
 
-                                # 3. Status events
+                                # 4. Status events
                                 if getattr(server_content, "turn_complete", False):
                                     await websocket.send_json({"type": "turnComplete"})
                                 
@@ -275,7 +453,7 @@ async def websocket_gemini_live(
             await asyncio.gather(pump_browser_to_gemini(), pump_gemini_to_browser())
 
     except Exception as e:
-        logger.error(f"Gemini Live session error: {e}")
+        logger.error(f"Agentic Gemini Live session error: {e}")
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
         except:

@@ -32,6 +32,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [callDuration, setCallDuration] = useState<number>(0);
   const [micVolume, setMicVolume] = useState<number>(0);
+  const [activeToolAction, setActiveToolAction] = useState<{ tool: string; status: string; args?: any; result?: any } | null>(null);
   const [speakerVolume, setSpeakerVolume] = useState<number>(0);
 
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
@@ -183,6 +184,12 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
           onUserTextData: (text) => {
             currentUserTextRef.current += text;
             setLiveUserText(currentUserTextRef.current);
+          },
+          onAgentAction: (action) => {
+            setActiveToolAction(action);
+            if (action.status === 'completed') {
+              setTimeout(() => setActiveToolAction(null), 3000);
+            }
           },
           onTurnComplete: () => {
             const finalAi = currentAiTextRef.current.trim();
@@ -461,6 +468,23 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                   <p className="text-xs md:text-sm text-cyan-100 font-medium">
                     {liveAiText}
                   </p>
+                </div>
+              )}
+
+              {/* Active Autonomous Tool Execution Badge */}
+              {activeToolAction && (
+                <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 to-orange-500/15 border border-amber-500/40 text-amber-300 text-xs animate-pulse">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <div className="flex flex-col">
+                    <span className="font-bold">
+                      {activeToolAction.status === 'executing' ? `⚡ Agent Executing: ${activeToolAction.tool}...` : `✅ Tool Output Processed: ${activeToolAction.tool}`}
+                    </span>
+                    {activeToolAction.args && (
+                      <span className="font-mono text-[10px] text-amber-200/80">
+                        Input: {JSON.stringify(activeToolAction.args)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
